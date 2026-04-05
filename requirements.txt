@@ -1,0 +1,14 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+langchain>=0.3.14
+langchain-core>=0.3.0
+langchain-text-splitters>=0.3.0
+langchain-google-genai>=2.5.0
+langchain-openai>=0.2.0
+google-genai>=1.0.0
+openai>=1.0.0
+langchain-chroma>=0.2.3
+chromadb-client==0.6.3
+pydantic-settings==2.7.1
+python-dotenv==1.0.1
+requests>=2.32.0
