@@ -55,18 +55,19 @@ def should_index_file(path: str) -> bool:
     return True
 
 
-def load_from_gitlab(branch: str) -> list[Document]:
+def load_from_gitlab(branch: str, project_id: str = "") -> list[Document]:
     """
     Читает файлы проекта из GitLab API и возвращает LangChain Documents.
 
     Args:
-        branch: ветка для чтения (например "master" или "develop")
+        branch:     ветка для чтения (например "master" или "develop")
+        project_id: GitLab project ID или namespace/repo. Если пусто —
+                    берётся gitlab_project_id из settings.
 
     Returns:
         Список Document: page_content=содержимое файла,
         metadata={"source": path, "branch": branch, "language": str}
     """
-    # Импорт здесь — loader используется и без settings в тестах
     from app.config import get_settings
     settings = get_settings()
 
@@ -75,9 +76,9 @@ def load_from_gitlab(branch: str) -> list[Document]:
         "PRIVATE-TOKEN": settings.gitlab_token.get_secret_value(),
     })
 
-    project_id = quote(str(settings.gitlab_project_id), safe="")
-    tree_url = f"{settings.gitlab_url}/api/v4/projects/{project_id}/repository/tree"
-    files_base = f"{settings.gitlab_url}/api/v4/projects/{project_id}/repository/files"
+    pid = quote(str(project_id or settings.gitlab_project_id), safe="")
+    tree_url = f"{settings.gitlab_url}/api/v4/projects/{pid}/repository/tree"
+    files_base = f"{settings.gitlab_url}/api/v4/projects/{pid}/repository/files"
 
     # ── Шаг 1: получаем полный список файлов через пагинацию ──────────────────
     all_items: list[dict] = []

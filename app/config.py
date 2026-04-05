@@ -48,9 +48,13 @@ class Settings(BaseSettings):
     # GitLab
     gitlab_url: str = "https://gitlab.com"
     gitlab_token: SecretStr = SecretStr("")
-    gitlab_project_id: str = ""
+    gitlab_project_id: str = ""          # используется agentic tools (MR, ветки)
     gitlab_default_branch: str = "develop"
     gitlab_index_branch: str = "master"
+
+    # Проекты для индексации кода (могут отличаться от gitlab_project_id)
+    gitlab_backend_project_id: str = ""  # если пусто — берём gitlab_project_id
+    gitlab_frontend_project_id: str = "" # если пусто — фронт не индексируется
 
     # Jira
     jira_url: str = ""

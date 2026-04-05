@@ -10,7 +10,7 @@ from app.api.auth import verify_api_key
 from app.biz.biz_agent import biz_agent
 from app.config import get_settings
 from app.indexer.embedder import embed_and_store
-from app.indexer.loader import load_from_gitlab
+from app.indexer.loader import load_from_gitlab  # noqa: F401 used in index()
 
 logger = logging.getLogger(__name__)
 
@@ -37,12 +37,27 @@ class AnswerResponse(BaseModel):
 
 
 class IndexRequest(BaseModel):
-    path: str | None = None
+    branch: str = ""      # пусто = берём gitlab_index_branch из .env
+    backend: bool = True
+    frontend: bool = True
 
 
 class IndexResponse(BaseModel):
     status: str
     files_indexed: int
+    chunks_created: int
+
+
+class IndexDocsRequest(BaseModel):
+    confluence: bool = True
+    jira: bool = True
+
+
+class IndexDocsResponse(BaseModel):
+    status: str
+    confluence_pages: int
+    confluence_skipped: int
+    jira_stories: int
     chunks_created: int
 
 
@@ -112,45 +127,38 @@ async def ask(request: QuestionRequest) -> AnswerResponse:
 @router.post(
     "/api/index",
     response_model=IndexResponse,
-    summary="Переиндексировать codebase",
+    summary="Переиндексировать codebase из GitLab (бэкенд + фронт)",
 )
 async def index(request: IndexRequest) -> IndexResponse:
     settings = get_settings()
+    branch = request.branch or settings.gitlab_index_branch
+    backend_id = settings.gitlab_backend_project_id or settings.gitlab_project_id
+    frontend_id = settings.gitlab_frontend_project_id
 
-    paths: list[tuple[str, list[str]]] = []
-
-    if request.path:
-        paths.append((request.path, [".java", ".ts", ".tsx", ".sql", ".md"]))
-    else:
-        if settings.backend_code_path:
-            paths.append((settings.backend_code_path, [".java"]))
-        if settings.frontend_code_path:
-            paths.append((settings.frontend_code_path, [".ts", ".tsx"]))
-
-    if not paths:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Путь не указан и не задан в конфигурации",
-        )
-
+    all_docs = []
     try:
-        documents = []
-        for path, extensions in paths:
-            documents.extend(load_files(path, extensions=extensions))
-    except (FileNotFoundError, NotADirectoryError) as exc:
+        if request.backend and backend_id:
+            docs = load_from_gitlab(branch, project_id=backend_id)
+            all_docs.extend(docs)
+
+        if request.frontend and frontend_id:
+            docs = load_from_gitlab(branch, project_id=frontend_id)
+            all_docs.extend(docs)
+    except Exception as exc:
+        logger.exception("Ошибка загрузки из GitLab: %s", exc)
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Ошибка GitLab API: {exc}",
         ) from exc
 
-    if not documents:
+    if not all_docs:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="По указанному пути не найдено файлов для индексации",
+            detail=f"В ветке '{branch}' не найдено файлов для индексации",
         )
 
     try:
-        stats = embed_and_store(documents, settings)
+        stats = embed_and_store(all_docs, settings)
     except Exception as exc:
         logger.exception("Ошибка при индексации: %s", exc)
         raise HTTPException(
@@ -162,6 +170,46 @@ async def index(request: IndexRequest) -> IndexResponse:
         status="success",
         files_indexed=stats["files_indexed"],
         chunks_created=stats["chunks_created"],
+    )
+
+
+@router.post(
+    "/api/index/docs",
+    response_model=IndexDocsResponse,
+    summary="Переиндексировать документацию (Confluence + Jira)",
+)
+async def index_docs(request: IndexDocsRequest) -> IndexDocsResponse:
+    from indexer.confluence_indexer import index_confluence
+    from indexer.jira_indexer import index_jira_stories
+
+    conf_pages = conf_skipped = conf_chunks = 0
+    jira_stories = jira_chunks = 0
+    settings = get_settings()
+
+    try:
+        if request.confluence:
+            result = index_confluence(settings)
+            conf_pages = result["pages_indexed"]
+            conf_skipped = result["pages_skipped"]
+            conf_chunks = result["chunks_created"]
+
+        if request.jira:
+            result = index_jira_stories(settings)
+            jira_stories = result["stories_indexed"]
+            jira_chunks = result["chunks_created"]
+    except Exception as exc:
+        logger.exception("Ошибка при индексации документов: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка индексации: {exc}",
+        ) from exc
+
+    return IndexDocsResponse(
+        status="success",
+        confluence_pages=conf_pages,
+        confluence_skipped=conf_skipped,
+        jira_stories=jira_stories,
+        chunks_created=conf_chunks + jira_chunks,
     )
 
 
