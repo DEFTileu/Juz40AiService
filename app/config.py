@@ -18,6 +18,9 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
+    # API защита — обязательный токен для всех эндпойнтов
+    api_key: SecretStr
+
     # LLM Provider
     llm_provider: str = "gemini"
 

@@ -4,7 +4,7 @@ import time
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import router
+from app.api.routes import public_router, router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,13 +19,16 @@ app = FastAPI(
         "Использует ChromaDB для хранения векторов и Gemini для генерации ответов."
     ),
     version="1.0.0",
+    docs_url=None,      # отключаем публичный Swagger UI
+    redoc_url=None,     # отключаем публичный ReDoc
+    openapi_url=None,   # отключаем публичную схему OpenAPI
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8080"],  # Telegram Bot (Spring Boot)
+    allow_origins=["http://localhost:8080"],
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 
@@ -44,6 +47,7 @@ async def log_requests(request: Request, call_next) -> Response:
     return response
 
 
+app.include_router(public_router)
 app.include_router(router)
 
 

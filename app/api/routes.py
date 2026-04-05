@@ -1,19 +1,21 @@
 import logging
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
 
 from app.agent.chain import agent
 from app.agent.retriever import CodeRetriever
 from app.agentic.executor import executor
+from app.api.auth import verify_api_key
 from app.biz.biz_agent import biz_agent
 from app.config import get_settings
 from app.indexer.embedder import embed_and_store
-from app.indexer.loader import load_files
+from app.indexer.loader import load_from_gitlab
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(verify_api_key)])
+public_router = APIRouter()  # без токена — только /health
 
 
 # ── Pydantic models ────────────────────────────────────────────────────────────
@@ -208,7 +210,7 @@ async def biz_ask(request: BizAskRequest) -> BizAnswerResponse:
     )
 
 
-@router.get(
+@public_router.get(
     "/health",
     response_model=HealthResponse,
     summary="Проверка состояния сервиса",
