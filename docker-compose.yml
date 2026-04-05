@@ -1,4 +1,5 @@
 services:
+
   chromadb:
     image: chromadb/chroma:latest
     container_name: juz40-chromadb
@@ -9,6 +10,27 @@ services:
     environment:
       - IS_PERSISTENT=TRUE
       - ANONYMIZED_TELEMETRY=FALSE
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ai-service:
+    build: .
+    container_name: juz40-ai-service
+    ports:
+      - "8090:8090"
+    env_file:
+      - .env
+    environment:
+      # ChromaDB внутри Docker — обращаемся по имени сервиса, не localhost
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+    depends_on:
+      chromadb:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
